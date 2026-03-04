@@ -1,0 +1,32 @@
+# Environment
+.env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.cpython-*.pyc
+*.cpython-*.pyo
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# User profiles (contains personal data)
+app/profiles/*.md
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
