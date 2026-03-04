@@ -1,4 +1,4 @@
-.PHONY: install run dev docker-build docker-up docker-down lint clean help
+.PHONY: install run dev docker-build docker-up docker-down lint clean bot help
 
 help:
 	@echo "Job Matcher API - Available commands:"
@@ -6,6 +6,7 @@ help:
 	@echo "  make install       Install dependencies"
 	@echo "  make run           Run API in production mode"
 	@echo "  make dev           Run API in development mode (auto-reload)"
+	@echo "  make bot           Run Telegram bot"
 	@echo "  make docker-build  Build Docker image"
 	@echo "  make docker-up     Start with Docker Compose"
 	@echo "  make docker-down   Stop Docker Compose"
@@ -20,6 +21,9 @@ run:
 
 dev:
 	uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+bot:
+	python bot.py
 
 docker-build:
 	docker compose build
