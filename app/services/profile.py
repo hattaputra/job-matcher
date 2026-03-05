@@ -63,3 +63,11 @@ def delete_profile(sender_id: int):
     path = profile_path(sender_id)
     if path.exists():
         path.unlink()
+
+
+def append_salary_benchmarks(sender_id: int, salary_md: str):
+    """Append LLM-generated salary benchmarks to existing profile."""
+    existing = load_profile(sender_id)
+    updated = existing + "
+" + salary_md
+    save_profile(sender_id, updated)

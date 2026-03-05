@@ -10,9 +10,10 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from app.services.profile import (
     profile_exists, save_profile, append_preferences,
-    generate_profile_from_cv, load_profile, delete_profile
+    generate_profile_from_cv, load_profile, delete_profile,
+    append_salary_benchmarks
 )
-from app.services.cv_extractor import extract_text_from_pdf, generate_profile_from_cv_text
+from app.services.cv_extractor import extract_text_from_pdf, generate_profile_from_cv_text, generate_salary_benchmarks
 
 load_dotenv()
 
@@ -36,22 +37,63 @@ def extract_linkedin_url(text: str) -> str | None:
 
 def format_rating(data: dict) -> str:
     r = data.get("rating", {})
-    score = r.get("score", 0)
+    score_pct = r.get("score_pct", 0)
+    grade_label = r.get("grade_label", "")
+    title = r.get("raw_title") or "Unknown Role"
+    company = r.get("raw_company") or ""
+    scorecard = r.get("scorecard", [])
+    red_flags = r.get("red_flags", [])
 
-    if score >= 8:
-        grade = "🟢"
-    elif score >= 6:
-        grade = "🟡"
+    # Grade emoji
+    if score_pct >= 80:
+        grade_emoji = "🟢"
+    elif score_pct >= 60:
+        grade_emoji = "🟡"
     else:
-        grade = "🔴"
+        grade_emoji = "🔴"
 
-    summary = r.get("summary", "No summary available")
+    # Header
+    lines = [
+        f"{grade_emoji} *{title}*",
+        f"🏢 {company}" if company else "",
+        "",
+        f"⭐ *Overall: {score_pct}% — {grade_label}*",
+        "",
+    ]
 
-    return (
-        f"{grade} *{r.get('raw_title', 'Unknown Role')}* — {r.get('raw_company', '')}\n\n"
-        f"⭐ *Score:* {score}/10\n\n"
-        f"📊 *Full Analysis:*\n{summary}"
-    )
+    # Scorecard
+    if scorecard:
+        lines.append("📊 *Scorecard:*")
+        for i, row in enumerate(scorecard):
+            score = row.get("score", 0)
+            metric = row.get("metric", "")
+            evaluation = row.get("evaluation", "")
+
+            # Score bar
+            if score >= 70:
+                bar = "🟩"
+            elif score >= 40:
+                bar = "🟨"
+            elif score < 0:
+                bar = "🟥"
+            else:
+                bar = "🟥"
+
+            prefix = "└─" if i == len(scorecard) - 1 else "├─"
+            lines.append(f"`{prefix}` {bar} *{metric}* `{score}`")
+            if evaluation:
+                lines.append(f"      _{evaluation}_")
+
+        lines.append("")
+
+    # Red flags
+    if red_flags:
+        lines.append("⚠️ *Red Flags:*")
+        for flag in red_flags:
+            lines.append(f"• {flag}")
+        lines.append("")
+
+    return "\n".join(filter(lambda x: x is not None, lines)).strip()
 
 
 # ─── Onboarding Flow ───────────────────────────────────────────────
@@ -173,9 +215,25 @@ async def handle_relocation(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     append_preferences(sender_id, preferences)
 
+    await update.message.reply_text("💰 Generating salary benchmarks for your target markets...")
+
+    try:
+        profile_md = load_profile(sender_id)
+        salary_md = generate_salary_benchmarks(
+            profile_md=profile_md,
+            markets=preferences.get("markets", "")
+        )
+        append_salary_benchmarks(sender_id, salary_md)
+    except Exception as e:
+        await update.message.reply_text(f"⚠️ Could not generate salary benchmarks: {str(e)}")
+
     await update.message.reply_text(
         "🎉 *Profile complete!*\n\n"
-        "You're all set. Send me any LinkedIn job URL and I'll analyze it for you.\n\n"
+        "Your profile includes:\n"
+        "✅ CV analysis\n"
+        "✅ Job preferences\n"
+        "✅ Salary benchmarks per market\n\n"
+        "Send me any LinkedIn job URL and I'll analyze it for you.\n\n"
         "Example:\n`https://www.linkedin.com/jobs/view/1234567890/`",
         parse_mode="Markdown",
         reply_markup=ReplyKeyboardRemove()
