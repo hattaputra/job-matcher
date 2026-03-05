@@ -68,6 +68,5 @@ def delete_profile(sender_id: int):
 def append_salary_benchmarks(sender_id: int, salary_md: str):
     """Append LLM-generated salary benchmarks to existing profile."""
     existing = load_profile(sender_id)
-    updated = existing + "
-" + salary_md
+    updated = existing + "" + salary_md
     save_profile(sender_id, updated)
