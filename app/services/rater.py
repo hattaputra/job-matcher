@@ -1,4 +1,3 @@
-import json
 import re
 import httpx
 from pathlib import Path
@@ -47,32 +46,68 @@ def rate_jd(jd_data: dict, candidate_profile: str) -> JobRating:
         remote_friendly=parsed.get("remote_friendly", False),
         red_flags=parsed.get("red_flags", []),
         highlights=parsed.get("highlights", []),
-        summary=parsed.get("summary", raw),
+        summary=parsed.get("summary", ""),
         raw_title=jd_data.get("title"),
         raw_company=jd_data.get("company"),
+        raw_output=raw,
     )
 
 
 def _parse_table(text: str) -> dict:
     """
-    Parse the markdown table output from LLM.
-    Extract Final Fit Grade as score.
-    Return raw text as summary for display.
+    Parse markdown table + Final Fit Grade from LLM output.
+    Extracts each row of the scorecard and the final grade.
     """
     result = {
         "score": 0,
+        "score_pct": 0,
+        "grade_label": "",
+        "scorecard": [],
         "stack_match": [],
         "stack_missing": [],
         "seniority_match": False,
         "remote_friendly": False,
         "red_flags": [],
         "highlights": [],
-        "summary": text,
+        "summary": "",
     }
 
-    # Extract Final Fit Grade percentage
-    grade_match = re.search(r"Final Fit Grade:\s*(\d+)%", text)
+    # Extract Final Fit Grade
+    grade_match = re.search(r"Final Fit Grade:\s*(\d+)%\s*[—-]\s*(.+)", text)
     if grade_match:
-        result["score"] = int(grade_match.group(1)) // 10  # convert % to /10
+        result["score_pct"] = int(grade_match.group(1))
+        result["score"] = result["score_pct"] // 10
+        result["grade_label"] = grade_match.group(2).strip()
+
+    # Parse markdown table rows
+    # Format: | Metric | Weight | Score | Evaluation |
+    table_rows = re.findall(
+        r"\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*(-?\d+)\s*\|\s*([^|]+?)\s*\|",
+        text
+    )
+
+    scorecard = []
+    for row in table_rows:
+        metric, weight, score, evaluation = row
+        # Skip header row
+        if "metric" in metric.lower() or "weight" in metric.lower():
+            continue
+        try:
+            scorecard.append({
+                "metric": metric.strip(),
+                "weight": weight.strip(),
+                "score": int(score.strip()),
+                "evaluation": evaluation.strip(),
+            })
+        except ValueError:
+            continue
+
+    result["scorecard"] = scorecard
+
+    # Extract red flags from low-scoring rows
+    for row in scorecard:
+        if row["score"] < 0 or ("red flag" in row["metric"].lower() or "gap" in row["metric"].lower()):
+            if row["evaluation"] and row["evaluation"] not in result["red_flags"]:
+                result["red_flags"].append(row["evaluation"])
 
     return result
