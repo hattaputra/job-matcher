@@ -57,3 +57,9 @@ Sender ID: {sender_id}
 {llm_profile}
 """
     save_profile(sender_id, content)
+
+
+def delete_profile(sender_id: int):
+    path = profile_path(sender_id)
+    if path.exists():
+        path.unlink()

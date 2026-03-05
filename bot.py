@@ -10,7 +10,7 @@ from telegram.ext import (
 from dotenv import load_dotenv
 from app.services.profile import (
     profile_exists, save_profile, append_preferences,
-    generate_profile_from_cv
+    generate_profile_from_cv, load_profile, delete_profile
 )
 from app.services.cv_extractor import extract_text_from_pdf, generate_profile_from_cv_text
 
@@ -121,11 +121,13 @@ async def handle_cv_upload(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_markets(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["markets"] = update.message.text
 
-    keyboard = [["Remote", "Hybrid", "Remote or Hybrid", "Onsite"]]
     await update.message.reply_text(
-        "🏢 *What work arrangement do you prefer?*",
+        "🏢 *What work arrangement do you prefer?*\n\n"
+        "You can choose multiple — just type them separated by comma.\n\n"
+        "Options: `Remote`, `Hybrid`, `Onsite`\n\n"
+        "Example: `Remote, Hybrid`",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        reply_markup=ReplyKeyboardRemove()
     )
     return WAITING_WORK_ARRANGEMENT
 
@@ -133,11 +135,13 @@ async def handle_markets(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_work_arrangement(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["work_arrangement"] = update.message.text
 
-    keyboard = [["Full-time only", "Full-time or Contract"]]
     await update.message.reply_text(
-        "💼 *What employment type do you accept?*",
+        "💼 *What employment type do you accept?*\n\n"
+        "You can choose multiple — just type them separated by comma.\n\n"
+        "Options: `Full-time`, `Contract`, `Freelance`\n\n"
+        "Example: `Full-time, Contract`",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        reply_markup=ReplyKeyboardRemove()
     )
     return WAITING_EMPLOYMENT_TYPE
 
@@ -145,11 +149,13 @@ async def handle_work_arrangement(update: Update, context: ContextTypes.DEFAULT_
 async def handle_employment_type(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["employment_type"] = update.message.text
 
-    keyboard = [["Yes, open to relocation", "No, remote only"]]
     await update.message.reply_text(
-        "✈️ *Are you open to relocation for the right role?*",
+        "✈️ *Relocation & remote preference?*\n\n"
+        "You can choose multiple — just type them separated by comma.\n\n"
+        "Options: `Open to relocation`, `Remote only`, `Hybrid acceptable`, `Onsite if needed`\n\n"
+        "Example: `Open to relocation, Remote only`",
         parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True)
+        reply_markup=ReplyKeyboardRemove()
     )
     return WAITING_RELOCATION
 
@@ -183,6 +189,45 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=ReplyKeyboardRemove()
     )
     return ConversationHandler.END
+
+
+# ─── Profile Commands ─────────────────────────────────────────────
+
+async def show_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sender_id = update.effective_user.id
+
+    if not profile_exists(sender_id):
+        await update.message.reply_text(
+            "You don't have a profile yet. Type /start to create one."
+        )
+        return
+
+    profile = load_profile(sender_id)
+    # Telegram max message length is 4096
+    if len(profile) > 4000:
+        profile = profile[:4000] + "\n\n_...truncated_"
+
+    await update.message.reply_text(
+        f"📋 *Your current profile:*\n\n```\n{profile}\n```",
+        parse_mode="Markdown"
+    )
+
+
+async def reset_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sender_id = update.effective_user.id
+
+    if not profile_exists(sender_id):
+        await update.message.reply_text(
+            "You don't have a profile yet. Type /start to create one."
+        )
+        return
+
+    delete_profile(sender_id)
+    await update.message.reply_text(
+        "🗑️ *Profile deleted.*\n\n"
+        "Type /start to create a new one.",
+        parse_mode="Markdown"
+    )
 
 
 # ─── Job Matching ──────────────────────────────────────────────────
@@ -245,6 +290,8 @@ def main():
     )
 
     app.add_handler(conv_handler)
+    app.add_handler(CommandHandler("profile", show_profile))
+    app.add_handler(CommandHandler("reset", reset_profile))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("Bot started.")
